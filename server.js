@@ -9,16 +9,19 @@ const cron = require('node-cron');
 const Auction = require('./models/Auction');
 const Bid = require('./models/Bid');
 
-// Import routes
 const authRoutes = require('./routes/auth');
 const auctionRoutes = require('./routes/auctions');
 const bidRoutes = require('./routes/bids');
 const userRoutes = require('./routes/users');
 const paymentRoutes = require('./routes/payments');
 
+const app = express();
+const server = http.createServer(app);
+
+// ✅ CORS should be before routes and applied only once
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://auction-client-rouge.vercel.app'
+  'https://auction-client-rouge.vercel.app',
 ];
 
 app.use(cors({
@@ -32,30 +35,29 @@ app.use(cors({
   credentials: true,
 }));
 
-const server = http.createServer(app);
-
-// Middleware
-app.use(cors());
+// ✅ Body parser
 app.use(express.json());
 
-// API Routes
+// ✅ Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/auctions', auctionRoutes);
 app.use('/api/bids', bidRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
 
-// Error handler
+// ✅ Error handler
 app.use(errorHandler);
 
-// Schedule a job to end expired auctions and set the winner every minute
+// ✅ CRON job
 cron.schedule('* * * * *', async () => {
   try {
     const now = new Date();
-    // Find all ongoing auctions whose endTime has passed
-    const expiredAuctions = await Auction.find({ status: 'ongoing', endTime: { $lt: now } });
+    const expiredAuctions = await Auction.find({
+      status: 'ongoing',
+      endTime: { $lt: now },
+    });
+
     for (const auction of expiredAuctions) {
-      // Find the highest bid for this auction
       const highestBid = await Bid.findOne({ auction: auction._id }).sort({ amount: -1 });
       auction.status = 'ended';
       if (highestBid) {
@@ -63,6 +65,7 @@ cron.schedule('* * * * *', async () => {
       }
       await auction.save();
     }
+
     if (expiredAuctions.length > 0) {
       console.log(`Ended ${expiredAuctions.length} auctions and set winners.`);
     }
@@ -71,11 +74,11 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
-// Connect to DB and start server
+// ✅ DB Connect & Start Server
 const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    initSocket(server);
+    initSocket(server); // Socket.IO should be initialized after server starts
   });
-}); 
+});
